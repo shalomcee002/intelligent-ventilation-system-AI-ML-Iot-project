@@ -18,6 +18,25 @@ export const AISmartModePanel = () => {
     return Colors.inactive;
   };
 
+  const getAIModeIcon = (mode: 'Active' | 'Learning' | 'Manual') => {
+    switch (mode) {
+      case 'Active':
+        return 'check-circle';
+      case 'Learning':
+        return 'lightbulb-on';
+      case 'Manual':
+        return 'cog';
+      default:
+        return 'brain';
+    }
+  };
+
+  const getButtonColor = () => {
+    if (aiMode === 'Active') return Colors.primary;
+    if (aiMode === 'Learning') return Colors.accent;
+    return Colors.inactive;
+  };
+
   return (
     <View style={styles.aiPanel}>
       <View style={styles.aiHeader}>
@@ -33,8 +52,9 @@ export const AISmartModePanel = () => {
           <Text style={styles.aiConfidenceLabel}>Confidence</Text>
           <Text style={styles.aiConfidenceValue}>{aiConfidence}%</Text>
         </View>
-        <TouchableOpacity style={styles.toggleButton} onPress={toggleAIMode}>
-          <FontAwesome name="power-off" size={20} color={Colors.text} />
+        <TouchableOpacity style={[styles.toggleButton, { backgroundColor: getButtonColor() }]} onPress={toggleAIMode}>
+          <MaterialCommunityIcons name={getAIModeIcon(aiMode)} size={20} color={Colors.text} />
+          <Text style={styles.toggleButtonText}>Change Mode</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -57,10 +77,10 @@ export const AISuggestionCard = ({ suggestion }: { suggestion: any }) => {
       <FontAwesome name="lightbulb-o" size={24} color={Colors.accent} />
       <Text style={styles.suggestionText}>{suggestion.text}</Text>
       <View style={styles.suggestionActions}>
-        <TouchableOpacity style={[styles.actionButton, styles.applyButton]} onPress={handleApply}>
+        <TouchableOpacity style={styles.applyButton} onPress={handleApply}>
           <Text style={styles.actionButtonText}>Apply</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.actionButton, styles.dismissButton]} onPress={() => dismissSuggestion(suggestion.id)}>
+        <TouchableOpacity style={styles.dismissButton} onPress={() => dismissSuggestion(suggestion.id)}>
           <Text style={styles.actionButtonText}>Dismiss</Text>
         </TouchableOpacity>
       </View>
@@ -296,45 +316,64 @@ const styles = StyleSheet.create({
   },
   toggleButton: {
     backgroundColor: Colors.background,
-    width: 44,
+    width: 100, // Increased width to accommodate text
     height: 44,
     borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
+    flexDirection: 'row', // Arrange icon and text horizontally
+    paddingHorizontal: 10,
+  },
+  toggleButtonText: {
+    color: Colors.text,
+    fontWeight: 'bold',
+    marginLeft: 5, // Space between icon and text
+    fontSize: 12,
   },
   suggestionCard: {
     backgroundColor: Colors.card,
     borderRadius: 16,
     padding: 16,
-    marginBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'column', // Changed to column for better button layout
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    width: 260, // Fixed width for consistency with FlatList
+    height: 180, // Fixed height for consistency
   },
   suggestionText: {
     flex: 1,
     color: Colors.text,
     fontSize: 14,
-    marginLeft: 12,
+    marginVertical: 12, // Add vertical margin
   },
   suggestionActions: {
     flexDirection: 'row',
-  },
-  actionButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginLeft: 8,
+    justifyContent: 'space-between',
+    width: '100%', // Take full width
+    marginTop: 10,
   },
   applyButton: {
     backgroundColor: Colors.primary,
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 20,
+    flex: 1, // Take equal space
+    marginRight: 5, // Space between buttons
+    alignItems: 'center',
   },
   dismissButton: {
     backgroundColor: Colors.inactive,
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 20,
+    flex: 1, // Take equal space
+    marginLeft: 5, // Space between buttons
+    alignItems: 'center',
   },
   actionButtonText: {
     color: Colors.text,
     fontWeight: 'bold',
-    fontSize: 12,
+    fontSize: 13,
   },
   comfortPanel: {
     backgroundColor: Colors.card,

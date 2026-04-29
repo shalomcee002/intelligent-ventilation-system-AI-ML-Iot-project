@@ -3,7 +3,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, ReactNode, useEffect, useState } from 'react';
 import { decisionEngine } from '../ai/decisionEngine';
 import { learningEngine } from '../ai/learningEngine';
+import { getWeatherAdvice } from '../services/advice';
 import * as api from '../services/api';
+import { fetchWeatherData } from '../services/weather';
 
 interface SensorData {
   temperature: number;
@@ -45,11 +47,14 @@ interface AppContextProps {
   aiDecisionSource: string[];
   aiDecisionSuggestions: string[];
   userOverrideOccurred: boolean;
+  userLocation: string;
+  weatherAdvice: string;
   setESPAddress: (ip: string) => void;
+  updateUserLocation: (location: string) => void;
   toggleAC: () => void;
   updateMode: (newMode: string) => void;
   updateTemperature: (newTemp: number) => void;
-  refreshData: () => void;
+  refreshData: () => Promise<boolean>;
   toggleAIMode: () => void;
   dismissSuggestion: (id: string) => void;
   setUserOverrideOccurred: (status: boolean) => void;
@@ -94,16 +99,28 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [aiDecisionSource, setAiDecisionSource] = useState<string[]>([]);
   const [aiDecisionSuggestions, setAiDecisionSuggestions] = useState<string[]>([]);
   const [userOverrideOccurred, setUserOverrideOccurred] = useState(false);
+  const [userLocation, setUserLocation] = useState('London');
+  const [weatherAdvice, setWeatherAdvice] = useState('');
 
   useEffect(() => {
-    const loadIpAddress = async () => {
+    const loadAppSettings = async () => {
       const storedIp = await AsyncStorage.getItem('espIpAddress');
       if (storedIp) {
         setEspIpAddress(storedIp);
         api.setBaseUrl(storedIp);
+        addLog(`Loaded ESP IP: ${storedIp}`);
+      } else {
+        addLog("No ESP IP found in storage.");
+      }
+      const storedLocation = await AsyncStorage.getItem('userLocation');
+      if (storedLocation) {
+        setUserLocation(storedLocation);
+        addLog(`Loaded user location: ${storedLocation}`);
+      } else {
+        addLog("No user location found in storage. Defaulting to London.");
       }
     };
-    loadIpAddress();
+    loadAppSettings();
   }, []);
 
   useEffect(() => {
@@ -129,8 +146,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
       temperature: sensorData.temperature,
       motion: sensorData.motionDetected === 'Yes' ? 1 : 0,
-      userOverride: false, // This would be set to true if a manual change just occurred
+      userOverride: userOverrideOccurred, // Use the actual userOverrideOccurred state
     });
+    setUserOverrideOccurred(false); // Reset override flag after learning
 
     // 2. Get decision from AI Decision Engine
     const decision = decisionEngine.makeDecision({
@@ -180,31 +198,46 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       ...prev,
       datasets: [{ data: prev.datasets[0].data.map(d => d + (Math.random() - 0.5)) }],
     }));
-
-    // Simulate weather changes (still needed for dynamic outdoorTemp/weatherCondition)
-    const weatherConditions: Array<'Sunny' | 'Cloudy' | 'Rainy' | 'Stormy'> = ['Sunny', 'Cloudy', 'Rainy', 'Stormy'];
-    if (Math.random() > 0.9) { // 10% chance to change weather
-      const newWeather = weatherConditions[Math.floor(Math.random() * weatherConditions.length)];
-      const newTemp = Math.floor(Math.random() * 15) + 15;
-      setWeatherCondition(newWeather);
-      setOutdoorTemp(newTemp);
-      addLog(`Weather updated: ${newWeather}, ${newTemp}°C`);
-    }
   };
 
-  const refreshData = async () => {
-    const data = await api.getSensorData();
-    if (data) {
-      setSensorData(data);
-      setAcStatus(data.acStatus);
+  const refreshData = async (): Promise<boolean> => {
+    addLog("Refreshing data...");
+    let success = false;
+
+    // Fetch sensor data
+    const sensor = await api.getSensorData();
+    if (sensor) {
+      setSensorData(sensor);
+      setAcStatus(sensor.acStatus);
       setConnectionStatus('Connected');
-      setHistoricalData(prevData => [...prevData, data].slice(-20));
+      setHistoricalData(prevData => [...prevData, sensor].slice(-20));
       setDeviceStatus('Online');
       setLastSyncTime(new Date());
+      success = true;
     } else {
       setConnectionStatus('Device Offline');
       setDeviceStatus('Offline');
+      success = false;
     }
+
+    // Fetch weather data
+    try {
+      addLog(`Fetching weather for location: ${userLocation}`);
+      const weather = await fetchWeatherData(userLocation);
+      if (weather) {
+        setOutdoorTemp(weather.temperature);
+        setWeatherCondition(weather.condition as 'Sunny' | 'Cloudy' | 'Rainy' | 'Stormy');
+        const advice = getWeatherAdvice(weather.temperature, weather.condition);
+        setWeatherAdvice(advice);
+        addLog(`Weather updated: Temp=${weather.temperature}°C, Condition=${weather.condition}. Advice: ${advice}`);
+      } else {
+        addLog("Failed to fetch weather data.");
+      }
+    } catch (error) {
+      addLog("Error fetching weather data.");
+      console.error("Weather fetch error:", error);
+    }
+    return success;
   };
 
   const setESPAddress = async (ip: string) => {
@@ -213,6 +246,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     api.setBaseUrl(ip);
     refreshData();
     addLog(`Device IP address updated to ${ip}.`);
+  };
+
+  const updateUserLocation = async (location: string) => {
+    setUserLocation(location);
+    await AsyncStorage.setItem('userLocation', location);
+    refreshData();
+    addLog(`User location updated to ${location}.`);
   };
 
   const toggleAC = async () => {
@@ -284,6 +324,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         dismissSuggestion,
         userOverrideOccurred,
         setUserOverrideOccurred,
+        userLocation,
+        updateUserLocation,
+        weatherAdvice,
       }}
     >
       {children}
